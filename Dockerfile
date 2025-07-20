@@ -16,7 +16,8 @@ RUN apk add --no-cache \
     libwebp-dev \
     icu-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
+    && docker-php-ext-enable pdo_mysql mbstring exif pcntl bcmath gd zip intl
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -27,8 +28,8 @@ WORKDIR /var/www/html
 # Copy composer files
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install PHP dependencies with better error handling
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
 
 # Copy application files
 COPY . .
@@ -36,8 +37,8 @@ COPY . .
 # Create .env file if it doesn't exist
 RUN cp .env.example .env || true
 
-# Generate application key
-RUN php artisan key:generate --no-interaction
+# Generate application key (only if .env exists and APP_KEY is not set)
+RUN php artisan key:generate --no-interaction || true
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html \
