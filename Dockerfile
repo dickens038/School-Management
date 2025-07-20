@@ -29,8 +29,10 @@ WORKDIR /var/www/html
 # Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1
+# Install PHP dependencies with comprehensive error handling
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress --verbose || \
+    (composer clear-cache && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress --verbose) || \
+    (composer self-update && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress --verbose)
 
 # Copy package files for Node.js
 COPY package.json package-lock.json ./
