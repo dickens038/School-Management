@@ -19,6 +19,9 @@ RUN apk add --no-cache \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
     && docker-php-ext-enable pdo_mysql mbstring exif pcntl bcmath gd zip intl
 
+# Composer stage for dependency installation
+FROM base AS composer
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
@@ -28,8 +31,15 @@ WORKDIR /var/www/html
 # Copy composer files
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies with better error handling
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+# Install PHP dependencies with memory optimization and retry logic
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress --memory-limit=-1 || \
+    (composer clear-cache && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress --memory-limit=-1)
+
+# Application stage
+FROM base AS app
+
+# Copy vendor directory from composer stage
+COPY --from=composer /var/www/html/vendor /var/www/html/vendor
 
 # Copy application files
 COPY . .
