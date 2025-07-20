@@ -1,27 +1,24 @@
-# Use PHP 8.2 FPM Alpine
-FROM php:8.2-fpm-alpine
+# Use PHP 8.2 with Apache (more stable for deployment)
+FROM php:8.2-apache
 
-# Update package cache and install system dependencies
-RUN apk update && apk add --no-cache \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
     libxml2-dev \
     zip \
     unzip \
-    oniguruma-dev \
     libzip-dev \
-    freetype-dev \
-    libjpeg-turbo-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
     libwebp-dev \
-    icu-dev \
-    nginx \
+    libicu-dev \
     nodejs \
-    npm
-
-# Configure and install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
+    npm \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
+    && a2enmod rewrite
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -32,9 +29,8 @@ WORKDIR /var/www/html
 # Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies with better error handling
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress || \
-    (composer clear-cache && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress)
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1
 
 # Copy package files for Node.js
 COPY package.json package-lock.json ./
@@ -49,7 +45,7 @@ COPY . .
 RUN npm run build
 
 # Remove Node.js and npm to reduce image size
-RUN apk del nodejs npm
+RUN apt-get remove -y nodejs npm && apt-get autoremove -y
 
 # Create .env file if it doesn't exist
 RUN cp .env.example .env || true
@@ -62,35 +58,22 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Create nginx configuration
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /var/www/html/public; \
-    index index.php index.html; \
-    \
-    location / { \
-        try_files $uri $uri/ /index.php?$query_string; \
-    } \
-    \
-    location ~ \.php$ { \
-        fastcgi_pass 127.0.0.1:9000; \
-        fastcgi_index index.php; \
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
-        include fastcgi_params; \
-    } \
-}' > /etc/nginx/http.d/default.conf
-
-# Create nginx directory
-RUN mkdir -p /run/nginx
+# Configure Apache for Laravel
+RUN echo '<VirtualHost *:80>\n\
+    DocumentRoot /var/www/html/public\n\
+    <Directory /var/www/html/public>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
 # Clear and cache Laravel
 RUN php artisan config:cache \
     && php artisan route:cache \
     && php artisan view:cache
 
-# Expose port 80 for web traffic
+# Expose port 80
 EXPOSE 80
 
-# Start nginx and PHP-FPM
-CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"] 
+# Start Apache
+CMD ["apache2-foreground"] 
