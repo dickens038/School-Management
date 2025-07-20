@@ -1,8 +1,8 @@
 # Use PHP 8.2 FPM Alpine
 FROM php:8.2-fpm-alpine
 
-# Install system dependencies
-RUN apk add --no-cache \
+# Update package cache and install system dependencies
+RUN apk update && apk add --no-cache \
     git \
     curl \
     libpng-dev \
@@ -32,8 +32,9 @@ WORKDIR /var/www/html
 # Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1
+# Install PHP dependencies with better error handling
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress || \
+    (composer clear-cache && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 --no-progress)
 
 # Copy package files for Node.js
 COPY package.json package-lock.json ./
