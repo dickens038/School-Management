@@ -27,8 +27,8 @@ WORKDIR /var/www/html
 # Copy application files
 COPY . .
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install PHP dependencies with verbose output for debugging
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --memory-limit=-1 -vvv
 
 # Create .env file if it doesn't exist
 RUN cp .env.example .env || true
